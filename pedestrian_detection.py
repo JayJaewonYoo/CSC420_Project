@@ -2,11 +2,24 @@ import cv2
 import numpy as np
 import os
 
+from detectron2 import model_zoo
+from detectron2.engine import DefaultPredictor
+from detectron2.config import get_cfg
+from detectron2.utils.visualizer import Visualizer
+from detectron2.data import MetadataCatalog
+
+
 class PedestrianDetector():
     def __init__(self, cascade_classifier='pedestrian.xml'):
         self.pedestrian_cascade = cv2.CascadeClassifier(cascade_classifier)
 
-    def get_frame_masks(self, video_src='pedestrians.avi', output_dir='output/', display_video='display.avi'):
+        self.cfg = get_cfg()
+        self.cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
+        self.cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
+        self.cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+        self.predictor = DefaultPredictor(self.cfg)
+
+    def get_frame_masks_haar(self, video_src='pedestrians.avi', output_dir='output/', display_video='display.avi'):
         # Video Capture object
         cap = cv2.VideoCapture(video_src)
 
@@ -58,8 +71,66 @@ class PedestrianDetector():
 
         return frames, masks
 
+    def get_frame_masks_d2bbox(self, video_src='pedestrians.avi', output_dir='output/', display_video='display.avi'):
+        # Video Capture object
+        cap = cv2.VideoCapture(video_src)
 
-def main():
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Output video
+        frame_width = int(cap.get(3))
+        frame_height = int(cap.get(4))
+        size = (frame_width, frame_height)
+        result = cv2.VideoWriter(display_video,
+                                 cv2.VideoWriter_fourcc(*'MJPG'),
+                                 10, size)
+
+        masks = []
+        frames = []
+
+        frame_number = 0
+
+        while True:
+            ret, img = cap.read()
+
+            if not ret:
+                break
+
+            img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            outputs = self.predictor(img)
+            # Get bounding boxes
+            bboxes = outputs["instances"].pred_boxes.to("cpu")
+            classes = outputs["instances"].pred_classes
+
+            mask = np.zeros_like(img_gray)
+
+            display = img.copy()
+            label = 1
+            for idx, (x1, y1, x2, y2) in enumerate(bboxes):
+                if MetadataCatalog.get(self.cfg.DATASETS.TRAIN[0]).thing_classes[classes[idx]] is not 'person':
+                    continue
+                x1, y1, x2, y2 = int(x1.item()), int(y1.item()), int(x2.item()), int(y2.item())
+                cv2.rectangle(display, (x1, y1), (x2, y2), (0, 255, 0), 4)
+                mask[y1:y2, x1:x2] = label
+                label += 1
+
+            frames.append(img)
+            masks.append(mask)
+            result.write(display)
+
+            frame_number += 1
+
+        cap.release()
+        result.release()
+
+        frames = np.stack(frames, axis=0)
+        masks = np.stack(masks, axis=0)
+
+        return frames, masks
+
+
+def run_haar_example():
     # The input video
     video_src = 'pedestrians.avi'
     # The output directory
@@ -134,6 +205,6 @@ def main():
 
 if __name__ == '__main__':
     detector = PedestrianDetector('pedestrian.xml')
-    frames, masks = detector.get_frame_masks()
+    frames, masks = detector.get_frame_masks_d2bbox()
     print(frames.shape)
     print(masks.shape)
