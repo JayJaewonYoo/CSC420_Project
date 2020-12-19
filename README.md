@@ -20,6 +20,10 @@ python inpainting_integration.py -f <path-to-video>
 
 The script will output a video file in the current working directory.
 
+## Notebook
+
+Alternatively, the script is provided in a notebook format that can be run using Google Colab. Simply upload `inpainting_integration.ipynb` to Google Colab or a Jupyter Notebook context and run the notebook cells sequentially.
+
 ## Results
 
 Results of the inpainting algorithm on images can be found under the `\gifs` folder. The gif demonstrates the step by step progress of the algorithm inpainting the masked region.
