@@ -10,6 +10,7 @@ Original file is located at
 import os
 import numpy as np
 import cv2
+import argparse
 import matplotlib.pyplot as plt
 from scipy import ndimage
 from scipy import signal
@@ -26,9 +27,11 @@ from IPython.display import clear_output
 # Based on:
 # https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/criminisi_cvpr2003.pdf
 
+
 class InpaintAlgorithm():
     def __init__(self, image, labeled_mask, window_size=9, video=None, curr_frame=0):
-        assert image.shape[:2] == labeled_mask.shape, 'Image and mask must have same shape in 0 and 1 dimensions (HWC)'
+        assert image.shape[:
+                           2] == labeled_mask.shape, 'Image and mask must have same shape in 0 and 1 dimensions (HWC)'
 
         # Original inputs (keeping just in case)
         ######################
@@ -37,7 +40,8 @@ class InpaintAlgorithm():
         self.original_labeled_mask = labeled_mask.astype(np.float32)
         mask = np.copy(self.original_labeled_mask).astype(np.uint8)
         mask[mask > 0] = 255
-        (threshold, self.original_mask) = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        (threshold, self.original_mask) = cv2.threshold(
+            mask, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         # Mask is binary [0, 255] with 255 inside target, 0 outside
         ######################
 
@@ -53,7 +57,8 @@ class InpaintAlgorithm():
         # Mask is binary [0, 255] with 255 inside target, 0 outside
         # 1 at edges, 0 otherwise
         # self.fill_front = cv2.Canny(self.mask, 0, 255) / 255
-        contours, hierarchy = cv2.findContours(self.mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, hierarchy = cv2.findContours(
+            self.mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         self.fill_front = np.zeros_like(self.mask)
         cv2.drawContours(self.fill_front, contours, -1, color=1, thickness=1)
 
@@ -64,7 +69,7 @@ class InpaintAlgorithm():
 
         # Constant Scalars
         ######################
-        self.num_frames = 1 # Change later
+        self.num_frames = 1  # Change later
         self.window_size = window_size
         # Enforce must be odd and positive
         assert self.window_size % 2 != 0 and self.window_size > 0, 'Window size must be odd and positive'
@@ -80,12 +85,15 @@ class InpaintAlgorithm():
         self.sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
         self.sobel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]])
         # For calculating normal of target edge
-        self.simple_grad_kernel_x = np.array([[0, 0, 0], [-1, 0, 1], [0, 0, 0]])
+        self.simple_grad_kernel_x = np.array(
+            [[0, 0, 0], [-1, 0, 1], [0, 0, 0]])
         # For calculating normal of target edge
-        self.simple_grad_kernel_y = np.array([[0, -1, 0], [0, 0, 0], [0, 1, 0]])
+        self.simple_grad_kernel_y = np.array(
+            [[0, -1, 0], [0, 0, 0], [0, 1, 0]])
         # Used for quick confidences calculation
         self.ones_window = np.ones((self.window_size, self.window_size))
-        self.normalization_array = signal.convolve2d(np.ones_like(self.mask), self.ones_window, mode='same', boundary='fill', fillvalue=0)  # Used for quick confidences calculation
+        self.normalization_array = signal.convolve2d(np.ones_like(
+            self.mask), self.ones_window, mode='same', boundary='fill', fillvalue=0)  # Used for quick confidences calculation
         ######################
 
         # Arrays calculated using the above variables in the various function
@@ -96,7 +104,8 @@ class InpaintAlgorithm():
         self.edge_normal_x = None  # Defined in compute_normals()
         self.data = None  # Defined in compute_data()
         self.priorities = None  # Defined in compute_priorities()
-        self.subimage_source_regions = None # List of subimage source regions (idx corresponds to frame idx)
+        # List of subimage source regions (idx corresponds to frame idx)
+        self.subimage_source_regions = None
         ######################
 
     # Priority calculation functions
@@ -108,11 +117,14 @@ class InpaintAlgorithm():
         self.grad_x = ndimage.convolve(grayscale_image, self.sobel_x)
 
     def compute_normals(self):
-        edge_grad_x = ndimage.convolve(self.inv_mask, self.simple_grad_kernel_x)
-        edge_grad_y = ndimage.convolve(self.inv_mask, self.simple_grad_kernel_y)
+        edge_grad_x = ndimage.convolve(
+            self.inv_mask, self.simple_grad_kernel_x)
+        edge_grad_y = ndimage.convolve(
+            self.inv_mask, self.simple_grad_kernel_y)
         self.edge_normal_y = -1 * edge_grad_x
         self.edge_normal_x = edge_grad_y
-        normal_magnitude = np.sqrt(np.square(self.edge_normal_y) + np.square(self.edge_normal_x))
+        normal_magnitude = np.sqrt(
+            np.square(self.edge_normal_y) + np.square(self.edge_normal_x))
         # Prevent divide by 0 by not normalizing these elements
         normal_magnitude[normal_magnitude == 0] = 1
         self.edge_normal_y /= normal_magnitude
@@ -121,7 +133,8 @@ class InpaintAlgorithm():
     def compute_data(self):
         self.compute_gradients()
         self.compute_normals()
-        data = (self.grad_y * self.edge_normal_y) + (self.grad_x * self.edge_normal_x)
+        data = (self.grad_y * self.edge_normal_y) + \
+            (self.grad_x * self.edge_normal_x)
         data = np.abs(data)
         data[data == 0] = 1e-7
         # data *= self.fill_front # self.fill_front is assumed to be 1 at edges, 0 else
@@ -129,7 +142,8 @@ class InpaintAlgorithm():
         self.data = data
 
     def compute_confidences(self):
-        unnormalized_confidences = signal.convolve2d(self.C, self.ones_window, mode='same', boundary='fill', fillvalue=0)
+        unnormalized_confidences = signal.convolve2d(
+            self.C, self.ones_window, mode='same', boundary='fill', fillvalue=0)
         confidences = unnormalized_confidences / self.normalization_array
         # confidences *= self.fill_front # self.fill_front is assumed to be 1 at edges, 0 else
         self.C = confidences
@@ -145,7 +159,6 @@ class InpaintAlgorithm():
     #################
     def get_highest_priority_point(self):
         # Return point corresponding to highest priority
-
         """ Return coordinates for pixel with highest priority value """
         return np.unravel_index(self.priorities.argmax(), self.priorities.shape)
 
@@ -208,14 +221,14 @@ class InpaintAlgorithm():
         person_idx = person_idx[0].astype(int)
         '''
 
-        person_idx = int(self.labeled_mask[target_p]) - 1 # Convert to 0-indexing instead of 1-indexing
+        # Convert to 0-indexing instead of 1-indexing
+        person_idx = int(self.labeled_mask[target_p]) - 1
         assert person_idx >= 0, "No detections found or bug with target_p not overlapping with labeled_mask"
 
         return person_idx
 
     def define_subimage_sources(self):
         # Idea is to provide a set of y, x coordinates to traverse
-
         '''
         # Increase size of labeled mask so that fill front is overlapped by it
         for label in range(1, np.max(self.labeled_mask).astype(int) + 1):
@@ -226,8 +239,8 @@ class InpaintAlgorithm():
 
         # labeled_mask = np.copy(self.labeled_mask)
 
-        subimage_source_regions = [] # Each idx has coordinates for label idx + 1
-            # Coordinates are of form [(y_coords_1, x_coords_1), (y_coords_2, x_coords_2), ...]
+        subimage_source_regions = []  # Each idx has coordinates for label idx + 1
+        # Coordinates are of form [(y_coords_1, x_coords_1), (y_coords_2, x_coords_2), ...]
 
         # Defining subimage source region
         for label in range(1, np.max(self.labeled_mask).astype(int) + 1):
@@ -237,12 +250,12 @@ class InpaintAlgorithm():
             label_y, label_x = np.where(labeled_mask == label)
             box_height = label_y.max() - label_y.min() + 1
             box_width = label_x.max() - label_x.min() + 1
-            
-            subimage = labeled_mask[max(0, label_y.min() - box_height):min(labeled_mask.shape[0] - 1, label_y.max() + box_height), 
+
+            subimage = labeled_mask[max(0, label_y.min() - box_height):min(labeled_mask.shape[0] - 1, label_y.max() + box_height),
                                     max(0, label_x.min() - box_width):min(labeled_mask.shape[1] - 1, label_x.max() + box_width)]
-            
+
             subimage[subimage != label] = -label
-            
+
             subimage_source_regions.append(np.where(labeled_mask == -label))
 
         self.subimage_source_regions = subimage_source_regions
@@ -275,11 +288,12 @@ class InpaintAlgorithm():
 
         curr_y_source_coords, curr_x_source_coords = self.subimage_source_regions[person_idx]
 
-        coord_idxs_to_keep = np.logical_and.reduce((curr_y_source_coords - y_start_diff >= 0, curr_x_source_coords - x_start_diff >= 0, curr_y_source_coords + y_end_diff < self.image_height - 1, curr_x_source_coords + x_end_diff < self.image_width - 1))
+        coord_idxs_to_keep = np.logical_and.reduce((curr_y_source_coords - y_start_diff >= 0, curr_x_source_coords - x_start_diff >=
+                                                    0, curr_y_source_coords + y_end_diff < self.image_height - 1, curr_x_source_coords + x_end_diff < self.image_width - 1))
         curr_y_source_coords = curr_y_source_coords[coord_idxs_to_keep]
         curr_x_source_coords = curr_x_source_coords[coord_idxs_to_keep]
-        
-        best_i = 0 
+
+        best_i = 0
 
         for coord_idx in range(len(curr_y_source_coords)):
             y = curr_y_source_coords[coord_idx]
@@ -299,29 +313,33 @@ class InpaintAlgorithm():
             curr_source_patch = source_image[y_start:y_end, x_start:x_end, :]
             if 500 in curr_source_patch:  # Invalid patch; not entirely bound in source region
                 continue
-            
+
             if self.video is None:
-                curr_score = np.sum(np.square(curr_source_patch - target_patch) * patch_mask_3d)
+                curr_score = np.sum(
+                    np.square(curr_source_patch - target_patch) * patch_mask_3d)
 
                 patch_mean = np.zeros(3)
                 patch_mask = np.array(patch_mask, dtype=np.bool)
 
-                B = curr_source_patch[:,:,0]
+                B = curr_source_patch[:, :, 0]
                 patch_mean[0] = np.mean(B[patch_mask])
-                
-                G = curr_source_patch[:,:,1]
+
+                G = curr_source_patch[:, :, 1]
                 patch_mean[1] = np.mean(G[patch_mask])
-            
-                R = curr_source_patch[:,:,2]
+
+                R = curr_source_patch[:, :, 2]
                 patch_mean[2] = np.mean(R[patch_mask])
 
                 inv_patch_mask = np.invert(patch_mask)
                 w_mean, w_var = 1, 1
                 if curr_score <= min_score:
-                    patch_var = 0 
-                    patch_var += np.sum(np.square(B[inv_patch_mask] - patch_mean[0]))
-                    patch_var += np.sum(np.square(G[inv_patch_mask] - patch_mean[1]))
-                    patch_var += np.sum(np.square(R[inv_patch_mask] - patch_mean[2])) 
+                    patch_var = 0
+                    patch_var += np.sum(
+                        np.square(B[inv_patch_mask] - patch_mean[0]))
+                    patch_var += np.sum(
+                        np.square(G[inv_patch_mask] - patch_mean[1]))
+                    patch_var += np.sum(
+                        np.square(R[inv_patch_mask] - patch_mean[2]))
 
                     if curr_score < w_mean * min_score or patch_var < w_var * best_patch_variance:
                         best_patch_variance = patch_var
@@ -331,7 +349,7 @@ class InpaintAlgorithm():
                 frame_window = 3 // 2
                 start_frame = self.curr_frame - frame_window
                 end_frame = self.curr_frame + frame_window + 1
-                
+
                 if start_frame < 0:
                     diff = abs(start_frame)
                     start_frame = 0
@@ -342,39 +360,44 @@ class InpaintAlgorithm():
                     diff = end_frame - video_len
                     start_frame -= diff
                     end_frame = video_len
-                
-                source_patches = self.video[start_frame:end_frame, y_start:y_end, x_start:x_end]
+
+                source_patches = self.video[start_frame:end_frame,
+                                            y_start:y_end, x_start:x_end]
                 source_patches[frame_window] = curr_source_patch
 
                 for i, source_patch in enumerate(source_patches):
-                    curr_score = np.sum(np.square(source_patch - target_patch) * patch_mask_3d)
+                    curr_score = np.sum(
+                        np.square(source_patch - target_patch) * patch_mask_3d)
 
                     patch_mean = np.zeros(3)
                     patch_mask = np.array(patch_mask, dtype=np.bool)
 
-                    B = source_patch[:,:,0]
+                    B = source_patch[:, :, 0]
                     patch_mean[0] = np.mean(B[patch_mask])
-                    
-                    G = source_patch[:,:,1]
+
+                    G = source_patch[:, :, 1]
                     patch_mean[1] = np.mean(G[patch_mask])
-                
-                    R = source_patch[:,:,2]
+
+                    R = source_patch[:, :, 2]
                     patch_mean[2] = np.mean(R[patch_mask])
 
                     inv_patch_mask = np.invert(patch_mask)
                     w_mean, w_var = 1, 1
                     if curr_score <= min_score:
-                        patch_var = 0 
-                        patch_var += np.sum(np.square(B[inv_patch_mask] - patch_mean[0]))
-                        patch_var += np.sum(np.square(G[inv_patch_mask] - patch_mean[1]))
-                        patch_var += np.sum(np.square(R[inv_patch_mask] - patch_mean[2])) 
+                        patch_var = 0
+                        patch_var += np.sum(
+                            np.square(B[inv_patch_mask] - patch_mean[0]))
+                        patch_var += np.sum(
+                            np.square(G[inv_patch_mask] - patch_mean[1]))
+                        patch_var += np.sum(
+                            np.square(R[inv_patch_mask] - patch_mean[2]))
 
                         if curr_score < w_mean * min_score or patch_var < w_var * best_patch_variance:
                             best_patch_variance = patch_var
                             min_score = curr_score
                             optimal_source_patch = source_patch
                             best_i = i
-        
+
         assert optimal_source_patch is not None, "Source region not found."
         # print("Optimal Source Patch from Frame: ", self.curr_frame + best_i)
         return optimal_source_patch
@@ -406,7 +429,8 @@ class InpaintAlgorithm():
         self.mask[y_start:y_end, x_start:x_end] = 0
         # self.fill_front = cv2.Canny(self.mask, 0, 255) / 255
 
-        contours, hierarchy = cv2.findContours(self.mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, hierarchy = cv2.findContours(
+            self.mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         self.fill_front = np.zeros_like(self.mask)
         cv2.drawContours(self.fill_front, contours, -1, color=1, thickness=1)
 
@@ -425,8 +449,10 @@ class InpaintAlgorithm():
         target_p = self.get_highest_priority_point()
         target_patch, rel_coords, patch_mask = self.get_target_patch(target_p)
         person_idx = self.get_person_idx(target_p)
-        optimal_source_patch = self.find_optimal_source(target_patch, person_idx, rel_coords, patch_mask)
-        self.update_image_arrays(optimal_source_patch, target_p, rel_coords, patch_mask)
+        optimal_source_patch = self.find_optimal_source(
+            target_patch, person_idx, rel_coords, patch_mask)
+        self.update_image_arrays(optimal_source_patch,
+                                 target_p, rel_coords, patch_mask)
 
     def _do_inpainting_single(self):
         # Perform one iteration of inpainting
@@ -445,10 +471,11 @@ class InpaintAlgorithm():
             curr_image = self.image.astype(np.uint8)
 
             # cv2_imshow(curr_image)
-            
+
             # clear_output(wait=False)
         return self.image
     #################
+
 
 class InpaintVideo():
     def __init__(self, video, mask, window_size=9):
@@ -457,7 +484,7 @@ class InpaintVideo():
         mask: Video mask input T x H x W
         """
         assert video.shape[:3] == mask.shape
-        
+
         self.window_size = window_size
 
         self.original_video = video
@@ -467,12 +494,12 @@ class InpaintVideo():
         self.mask = np.copy(self.original_mask)
 
     def inpaint_curr_frame(self, curr_frame):
-        inpaintAlgorithm = InpaintAlgorithm(self.video[curr_frame], self.mask[curr_frame], \
+        inpaintAlgorithm = InpaintAlgorithm(self.video[curr_frame], self.mask[curr_frame],
                                             self.window_size, self.original_video, curr_frame)
         inpainted_frame = inpaintAlgorithm.do_inpainting()
-        
+
         return inpainted_frame
-    
+
     def inpaint(self):
         for frame in range(self.video.shape[0]):
             print("Frame ", frame)
@@ -480,18 +507,22 @@ class InpaintVideo():
             # cv2_imshow(inpainted_frame)
             self.video[frame] = inpainted_frame
 
+
 class PedestrianDetector():
-    def __init__(self, cascade_classifier='pedestrian.xml', do_video=False):
-        self.pedestrian_cascade = cv2.CascadeClassifier(cascade_classifier)
+    def __init__(self, do_video=False):
+        # self.pedestrian_cascade = cv2.CascadeClassifier(cascade_classifier)
 
         self.cfg = get_cfg()
-        self.cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
+        self.cfg.merge_from_file(model_zoo.get_config_file(
+            "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
         self.cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
-        self.cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+        self.cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(
+            "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
         self.predictor = DefaultPredictor(self.cfg)
 
         self.do_video = do_video
 
+    """ Human Detection using Haar (depricated)
     def get_frame_masks_haar(self, video_src='pedestrians.avi', video_save_path='display.avi'):
         # Video Capture object
         cap = cv2.VideoCapture(video_src)
@@ -503,15 +534,16 @@ class PedestrianDetector():
 
         if self.do_video:
             video_writer = cv2.VideoWriter(video_save_path,
-                                    cv2.VideoWriter_fourcc(*'MJPG'),
-                                    10, size)
+                                           cv2.VideoWriter_fourcc(*'MJPG'),
+                                           10, size)
         else:
             class EmptyWriter():
                 def write(self, _):
                     return
+
                 def release(self):
                     return
-            
+
             video_writer = EmptyWriter()
 
         masks = []
@@ -550,6 +582,7 @@ class PedestrianDetector():
         masks = np.stack(masks, axis=0)
 
         return frames, masks
+    """
 
     def get_frame_masks_d2bbox(self, video_src='pedestrians.avi', video_save_path='display.avi'):
         # Video Capture object
@@ -598,7 +631,8 @@ class PedestrianDetector():
             for idx, (x1, y1, x2, y2) in enumerate(bboxes):
                 if MetadataCatalog.get(self.cfg.DATASETS.TRAIN[0]).thing_classes[classes[idx]] is not 'person':
                     continue
-                x1, y1, x2, y2 = int(x1.item()), int(y1.item()), int(x2.item()), int(y2.item())
+                x1, y1, x2, y2 = int(x1.item()), int(
+                    y1.item()), int(x2.item()), int(y2.item())
                 cv2.rectangle(display, (x1, y1), (x2, y2), (0, 255, 0), 4)
                 mask[y1:y2, x1:x2] = label
                 label += 1
@@ -617,34 +651,29 @@ class PedestrianDetector():
 
         return frames, masks
 
+
 class Inpainter():
-    def __init__(self, video_path, cascade_classifier='pedestrian.xml', do_video=False):
-        self.person_detector = PedestrianDetector(cascade_classifier, do_video)
-        self.video_frames, self.labeled_masks = self.person_detector.get_frame_masks_d2bbox(video_src=video_path)
-        
-        self.inpaintVideo = InpaintVideo(self.video_frames, self.labeled_masks, window_size=15)
+    def __init__(self, video_path, do_video=False):
+        self.person_detector = PedestrianDetector(do_video)
+        self.video_frames, self.labeled_masks = self.person_detector.get_frame_masks_d2bbox(
+            video_src=video_path)
+
+        self.inpaintVideo = InpaintVideo(
+            self.video_frames, self.labeled_masks, window_size=15)
 
     def inpaint(self):
         self.inpaintVideo.inpaint()
 
-person_detector = PedestrianDetector('pedestrian.xml', False)
-video_frames, labeled_masks = person_detector.get_frame_masks_d2bbox('pedestrians.avi')
 
-inpaintVideo = InpaintVideo(video_frames, labeled_masks, window_size=15)
-inpaintVideo.inpaint()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Video Inpainter")
+    parser.add_argument(
+        "-f", dest="f", help="path to video file", type=str
+    )
 
-for idx, frame in enumerate(inpaintVideo.video):
-    cv2.imwrite(frame, 'output/frame_%6d.png' % idx)
+    opt = parser.parse_args()
 
-# cv2.imshow('im', inpaintVideo.video[0])
+    video_path = opt.f
 
-# test_inpainter = Inpainter('pedestrians.avi', 'pedestrian.xml')
-#
-# test_inpainter.inpaint()
-#
-# # For if we want to bilaterally filter outputs
-#
-# curr_image = cv2.imread('index.png', cv2.IMREAD_COLOR)
-# cv2.imshow('im', cv2.bilateralFilter(curr_image,9,75,75))
-# cv2.imshow('im', curr_image)
-
+    inpainter = Inpainter(video_path)
+    inpainter.inpaint()
