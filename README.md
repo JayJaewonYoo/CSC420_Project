@@ -26,4 +26,4 @@ Alternatively, the script is provided in a notebook format that can be run using
 
 ## Results
 
-Results of the inpainting algorithm on images can be found under the `\gifs` folder. The gif demonstrates the step by step progress of the algorithm inpainting the masked region.
+Results of the inpainting algorithm on images can be found under the `\gifs` folder. The gif demonstrates the step by step progress of the algorithm inpainting the masked region. Additional outputs of the inpainting algorithm used in our report can be found in the `results` folder. 
