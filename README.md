@@ -2,7 +2,7 @@
 
 The full pipeline required to inpaint videos can be found in `inpainting_integration.py`.
 
-There are four classes present in the file used in the pipeline:
+There are four main classes:
 
 1. `PedestrianDetector()`; the basis of the human detection algorithm that provides a masking matrix indicating target regions to be inpainted
 2. `InpaintAlgorithm()`; the basis of the inpainting algorithm that inpaints target regions given an image
@@ -19,3 +19,7 @@ python inpainting_integration.py -f <path-to-video>
 ```
 
 The script will output a video file in the current working directory.
+
+## Results
+
+Results of the inpainting algorithm on images can be found under the `\gifs` folder. The gif demonstrates the step by step progress of the algorithm inpainting the masked region.
