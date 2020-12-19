@@ -22,7 +22,7 @@ The script will output a video file in the current working directory.
 
 ## Notebook
 
-Alternatively, the script is provided in a notebook format that can be run using Google Colab. Simply upload `inpainting_integration.ipynb` to Google Colab or a Jupyter Notebook context and run the notebook cells sequentially.
+Alternatively, the script is provided in a notebook format that can be run using Google Colab. Simply upload `inpainting_integration.ipynb` to Google Colab or a Jupyter Notebook context and run the notebook cells sequentially. Prior to running the notebook in Google Colab, the runtime type must be set to "GPU", and "pedestrians.avi" found in the submitted zip file on Quercus must be uploaded to the Google Colab directory.
 
 ## Results
 
